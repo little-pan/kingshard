@@ -54,6 +54,10 @@ const (
 	Unknown
 )
 
+const (
+	moduleServer = "server.Server"
+)
+
 type Server struct {
 	cfg      *config.Config
 	addr     string
@@ -274,11 +278,8 @@ func NewServer(cfg *config.Config) (*Server, error) {
 		return nil, err
 	}
 
-	golog.Info("server", "NewServer", "Server running", 0,
-		"netProto",
-		netProto,
-		"address",
-		s.addr)
+	golog.Info(moduleServer, "NewServer", "Server running", 0,
+		              "netProto", netProto, "address", s.addr)
 	return s, nil
 }
 
@@ -337,7 +338,7 @@ func (s *Server) onConn(c net.Conn) {
 			const size = 4096
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)] //获得当前goroutine的stacktrace
-			golog.Error("server", "onConn", "error", 0,
+			golog.Error(moduleServer, "onConn", "error", 0,
 				"remoteAddr", c.RemoteAddr().String(),
 				"stack", string(buf),
 			)
@@ -348,13 +349,13 @@ func (s *Server) onConn(c net.Conn) {
 	}()
 
 	if allowConnect := conn.IsAllowConnect(); allowConnect == false {
-		err := mysql.NewError(mysql.ER_ACCESS_DENIED_ERROR, "ip address access denied by kingshard.")
+		err := mysql.NewError(mysql.ER_ACCESS_DENIED_ERROR, "ip address access denied by kingshard")
 		conn.writeError(err)
 		conn.Close()
 		return
 	}
 	if err := conn.Handshake(); err != nil {
-		golog.Error("server", "onConn", err.Error(), 0)
+		golog.Error(moduleServer, "onConn", err.Error(), conn.connectionId)
 		conn.writeError(err)
 		conn.Close()
 		return
@@ -560,7 +561,7 @@ func (s *Server) saveBlackSql() error {
 	}
 	f, err := os.Create(s.cfg.BlsFile)
 	if err != nil {
-		golog.Error("Server", "saveBlackSql", "create file error", 0,
+		golog.Error(moduleServer, "saveBlackSql", "create file error", 0,
 			"err", err.Error(),
 			"blacklist_sql_file", s.cfg.BlsFile,
 		)
@@ -601,7 +602,7 @@ func (s *Server) Run() error {
 	for s.running {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			golog.Error("server", "Run", err.Error(), 0)
+			golog.Error(moduleServer, "Run", err.Error(), 0)
 			continue
 		}
 

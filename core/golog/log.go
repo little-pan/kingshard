@@ -233,7 +233,7 @@ func GetLevel() int {
 var GlobalSysLogger *Logger = StdLogger()
 var GlobalSqlLogger *Logger = GlobalSysLogger
 
-func (l *Logger) Write(p []byte) (n int, err error) {
+func (l *Logger) Write(p []byte) (int, error) {
 	output(LevelInfo, "web", "api", string(p), 0)
 	return len(p), nil
 }
@@ -285,7 +285,7 @@ func OutputSql(state string, format string, v ...interface{}) {
 	l.msg <- buf
 }
 
-func output(level int, module string, method string, msg string, reqId uint32, args ...interface{}) {
+func output(level int, module string, method string, msg string, connId uint32, args ...interface{}) {
 	if level < GlobalSysLogger.Level() {
 		return
 	}
@@ -295,34 +295,49 @@ func output(level int, module string, method string, msg string, reqId uint32, a
 	for i := 0; i < num; i++ {
 		argsBuff.WriteString(escape(fmt.Sprintf("%v=%v", args[i*2], args[i*2+1]), false))
 		if (i+1)*2 != len(args) {
-			argsBuff.WriteString("|")
+			// `|` changed to `, ` for easy to read log
+			// @since 2018-01-18 little-pan
+			argsBuff.WriteString(", ")
 		}
 	}
 	if len(args)%2 == 1 {
 		argsBuff.WriteString(escape(fmt.Sprintf("%v", args[len(args)-1]), false))
 	}
 
-	content := fmt.Sprintf(`[%s] "%s" "%s" "%s" conn_id=%d`,
-		module, method, msg, argsBuff.String(), reqId)
-
+	// 1. add `()` after method
+	// 2. remove empty field in log
+	// @since 2018-01-18 little-pan
+	var content string
+	argsMsg := argsBuff.String()
+	if argsMsg == "" && connId == 0 {
+		content = fmt.Sprintf(`%s.%s(): %s`, module, method, msg)
+	}else if argsMsg != "" {
+		content = fmt.Sprintf(`%s.%s(): %s "%s"`, module, method, msg, argsMsg)
+	}else if connId != 0 {
+		content = fmt.Sprintf(`%s.%s(): client(conn_id=%d) - %s`, module, method, connId, msg)
+	}else {
+		content = fmt.Sprintf(`%s.%s(): client(conn_id=%d) - %s "%s"`, module, method, connId, msg, argsMsg)
+	}
 	GlobalSysLogger.Output(3, level, content)
 }
 
-func Trace(module string, method string, msg string, reqId uint32, args ...interface{}) {
-	output(LevelTrace, module, method, msg, reqId, args...)
+// `reqId` changed to `connId` for real conn_id in log
+// @since 2018-01-18 little-pan
+func Trace(module string, method string, msg string, connId uint32, args ...interface{}) {
+	output(LevelTrace, module, method, msg, connId, args...)
 }
-func Debug(module string, method string, msg string, reqId uint32, args ...interface{}) {
-	output(LevelDebug, module, method, msg, reqId, args...)
+func Debug(module string, method string, msg string, connId uint32, args ...interface{}) {
+	output(LevelDebug, module, method, msg, connId, args...)
 }
-func Info(module string, method string, msg string, reqId uint32, args ...interface{}) {
-	output(LevelInfo, module, method, msg, reqId, args...)
+func Info(module string, method string, msg string, connId uint32, args ...interface{}) {
+	output(LevelInfo, module, method, msg, connId, args...)
 }
-func Warn(module string, method string, msg string, reqId uint32, args ...interface{}) {
-	output(LevelWarn, module, method, msg, reqId, args...)
+func Warn(module string, method string, msg string, connId uint32, args ...interface{}) {
+	output(LevelWarn, module, method, msg, connId, args...)
 }
-func Error(module string, method string, msg string, reqId uint32, args ...interface{}) {
-	output(LevelError, module, method, msg, reqId, args...)
+func Error(module string, method string, msg string, connId uint32, args ...interface{}) {
+	output(LevelError, module, method, msg, connId, args...)
 }
-func Fatal(module string, method string, msg string, reqId uint32, args ...interface{}) {
-	output(LevelFatal, module, method, msg, reqId, args...)
+func Fatal(module string, method string, msg string, connId uint32, args ...interface{}) {
+	output(LevelFatal, module, method, msg, connId, args...)
 }

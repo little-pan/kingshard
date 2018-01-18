@@ -28,6 +28,10 @@ import (
 	"github.com/flike/kingshard/mysql"
 )
 
+const (
+	moduleConn = "server.ClientConn"
+)
+
 //client <-> proxy
 type ClientConn struct {
 	sync.Mutex
@@ -88,29 +92,25 @@ func (c *ClientConn) IsAllowConnect() bool {
 		}
 	}
 
-	golog.Error("server", "IsAllowConnect", "error", mysql.ER_ACCESS_DENIED_ERROR,
-		"ip address", c.c.RemoteAddr().String(), " access denied by kindshard.")
+	golog.Warn(moduleConn, "IsAllowConnect", "Access denied by kindshard", 0,
+		"ip address", c.c.RemoteAddr().String(),
+		"error code", mysql.ER_ACCESS_DENIED_ERROR)
 	return false
 }
 
 func (c *ClientConn) Handshake() error {
 	if err := c.writeInitialHandshake(); err != nil {
-		golog.Error("server", "Handshake", err.Error(),
-			c.connectionId, "msg", "send initial handshake error")
+		golog.Error(moduleConn, "Handshake", err.Error(), c.connectionId)
 		return err
 	}
 
 	if err := c.readHandshakeResponse(); err != nil {
-		golog.Error("server", "readHandshakeResponse",
-			err.Error(), c.connectionId,
-			"msg", "read Handshake Response error")
+		golog.Error(moduleConn, "Handshake", err.Error(), c.connectionId)
 		return err
 	}
 
 	if err := c.writeOK(nil); err != nil {
-		golog.Error("server", "readHandshakeResponse",
-			"write ok fail",
-			c.connectionId, "error", err.Error())
+		golog.Error(moduleConn, "Handshake",  err.Error(), c.connectionId)
 		return err
 	}
 
@@ -224,13 +224,23 @@ func (c *ClientConn) readHandshakeResponse() error {
 
 	checkAuth := mysql.CalcPassword(c.salt, []byte(c.proxy.cfg.Password))
 	if c.user != c.proxy.cfg.User || !bytes.Equal(auth, checkAuth) {
-		golog.Error("ClientConn", "readHandshakeResponse", "error", 0,
+		// Error() changed to Debug(): only need in dev mode
+		// @since 2018-01-18 little-pan
+		golog.Debug(moduleConn, "readHandshakeResponse", "auth error", c.connectionId,
 			"auth", auth,
 			"checkAuth", checkAuth,
 			"client_user", c.user,
 			"config_set_user", c.proxy.cfg.User,
-			"passworld", c.proxy.cfg.Password)
-		return mysql.NewDefaultError(mysql.ER_ACCESS_DENIED_ERROR, c.user, c.c.RemoteAddr().String(), "Yes")
+			// `passworld` changed to `config_set_password`
+			"config_set_password", c.proxy.cfg.Password)
+		// trim port field in user information
+		// @since 2018-01-18 little-pan
+		raddr := c.c.RemoteAddr().String()
+		rhost, _, err := net.SplitHostPort(raddr)
+		if err != nil {
+			rhost = raddr
+		}
+		return mysql.NewDefaultError(mysql.ER_ACCESS_DENIED_ERROR, c.user, rhost, "YES")
 	}
 
 	pos += authLen
@@ -261,14 +271,13 @@ func (c *ClientConn) Run() {
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
 
-			golog.Error("ClientConn", "Run",
-				err.Error(), 0,
-				"stack", string(buf))
+			golog.Error(moduleConn, "Run", err.Error(), c.connectionId, 
+				                                    "stack", string(buf))
 		}
 
 		c.Close()
 	}()
-
+	// server loop
 	for {
 		data, err := c.readPacket()
 
@@ -278,9 +287,7 @@ func (c *ClientConn) Run() {
 
 		if err := c.dispatch(data); err != nil {
 			c.proxy.counter.IncrErrLogTotal()
-			golog.Error("server", "Run",
-				err.Error(), c.connectionId,
-			)
+			golog.Error(moduleConn, "Run", err.Error(), c.connectionId)
 			c.writeError(err)
 			if err == mysql.ErrBadConn {
 				c.Close()
@@ -327,7 +334,7 @@ func (c *ClientConn) dispatch(data []byte) error {
 		return c.writeEOF(0)
 	default:
 		msg := fmt.Sprintf("command %d not supported now", cmd)
-		golog.Error("ClientConn", "dispatch", msg, 0)
+		golog.Error(moduleConn, "dispatch", msg, c.connectionId)
 		return mysql.NewError(mysql.ER_UNKNOWN_ERROR, msg)
 	}
 
