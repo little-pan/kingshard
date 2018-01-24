@@ -242,7 +242,7 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	s.slowLogTime[s.slowLogTimeIndex] = cfg.SlowLogTime
 
 	if len(cfg.Charset) == 0 {
-		cfg.Charset = mysql.DEFAULT_CHARSET //utf8
+		cfg.Charset = config.GO_CHARSET //utf8
 	}
 	cid, ok := mysql.CharsetIds[cfg.Charset]
 	if !ok {

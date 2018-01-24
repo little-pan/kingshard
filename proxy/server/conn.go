@@ -313,6 +313,9 @@ func (c *ClientConn) dispatch(data []byte) error {
 		c.Close()
 		return nil
 	case mysql.COM_QUERY:
+		// charset transfer, eg. gbk to utf8 etc
+		// @since 2018-01-24 little-pan
+		data = mysql.Decode(data, c.charset)
 		return c.handleQuery(hack.String(data))
 	case mysql.COM_PING:
 		return c.writeOK(nil)

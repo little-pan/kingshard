@@ -14,6 +14,12 @@
 
 package mysql
 
+import (
+	"github.com/axgle/mahonia"
+	"github.com/flike/kingshard/config"
+	"github.com/flike/kingshard/core/hack"
+)
+
 type CollationId uint8
 
 //charset key is charset name and value is default collation id
@@ -553,3 +559,69 @@ var (
 	DEFAULT_COLLATION_ID   CollationId = 33
 	DEFAULT_COLLATION_NAME string      = "utf8_general_ci"
 )
+
+// Decode bytes: charset -> utf8
+// @since 2018-01-24 little-pan
+func Decode(bytes []byte, charset string) [] byte {
+	if config.GO_CHARSET == charset {
+		return bytes
+	}
+	d := mahonia.NewDecoder(charset)
+	runes := make([]rune, len(bytes))
+	destPos := 0
+
+	for len(bytes) > 0 {
+		c, size, status := d(bytes)
+		if status == mahonia.STATE_ONLY {
+			bytes = bytes[size:]
+			continue
+		}
+		if status == mahonia.NO_ROOM {
+			c = 0xfffd
+			size = len(bytes)
+			status = mahonia.INVALID_CHAR
+		}
+		bytes = bytes[size:]
+		runes[destPos] = c
+		destPos++
+	}
+	return []byte(string(runes[:destPos]))
+}
+
+// Encode bytes: utf8 -> charset
+// @since 2018-01-24 little-pan
+func Encode(bytes []byte, charset string) []byte {
+	if config.GO_CHARSET == charset {
+		return bytes
+	}
+	return EncodeString(string(bytes), charset)
+}
+
+// Encode string: utf8 -> charset
+// @since 2018-01-24 little-pan
+func EncodeString(s string, charset string) []byte {
+	if config.GO_CHARSET == charset {
+		return hack.Slice(s)
+	}
+	e := mahonia.NewEncoder(charset)
+	dest := make([]byte, len(s)+10)
+	destPos := 0
+
+	for _, c := range s {
+		retry:
+		size, status := e(dest[destPos:], c)
+		if status == mahonia.NO_ROOM {
+			newDest := make([]byte, len(dest)*2)
+			copy(newDest, dest)
+			dest = newDest
+			goto retry
+		}
+		if status == mahonia.STATE_ONLY {
+			destPos += size
+			goto retry
+		}
+		destPos += size
+	}
+	dest = dest[:destPos]
+	return dest
+}

@@ -298,14 +298,14 @@ func (c *Conn) writeCommandBuf(command byte, arg []byte) error {
 
 func (c *Conn) writeCommandStr(command byte, arg string) error {
 	c.pkg.Sequence = 0
-
-	length := len(arg) + 1
+	// charset transfer, eg. utf8 to gbk etc
+	// @since 2018-01-24 little-pan
+	args  := mysql.EncodeString(arg, c.charset)
+	length := len(args) + 1
 
 	data := make([]byte, length+4)
-
 	data[4] = command
-
-	copy(data[5:], arg)
+	copy(data[5:], args)
 
 	return c.writePacket(data)
 }
@@ -490,7 +490,7 @@ func (c *Conn) FieldList(table string, wildcard string) ([]*mysql.Field, error) 
 			fs = append(fs, f)
 		}
 	}
-	return nil, fmt.Errorf("field list error")
+	return nil, errors.New("field list error")
 }
 
 func (c *Conn) exec(query string) (*mysql.Result, error) {

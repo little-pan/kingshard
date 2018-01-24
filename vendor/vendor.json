@@ -3,6 +3,12 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "xKxhxRfVwNBKWGjeWvcNZSNFr2s=",
+			"path": "github.com/axgle/mahonia",
+			"revision": "0c44128a83abf861873f8f4ec81fe58ff1cf6ea4",
+			"revisionTime": "2017-08-26T12:16:38Z"
+		},
+		{
 			"checksumSHA1": "EsJksAKyY2+r3mY+rdNocSCe1wg=",
 			"path": "github.com/dgrijalva/jwt-go",
 			"revision": "24c63f56522a87ec5339cc3567883f1039378fdb",

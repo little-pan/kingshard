@@ -200,7 +200,7 @@ func (c *ClientConn) executeInNode(conn *backend.BackendConn, sql string, args [
 	if strings.ToLower(c.proxy.logSql[c.proxy.logSqlIndex]) != golog.LogSqlOff &&
 		execTime > float64(c.proxy.slowLogTime[c.proxy.slowLogTimeIndex]) {
 		c.proxy.counter.IncrSlowLogTotal()
-		golog.OutputSql(state, "%.1fms - %s->%s:%s",
+		golog.OutputSql(state, "%.1fms - %s -> %s: %s",
 			execTime,
 			c.c.RemoteAddr(),
 			conn.GetAddr(),
@@ -255,7 +255,7 @@ func (c *ClientConn) executeInMultiNodes(conns map[string]*backend.BackendConn, 
 			if c.proxy.logSql[c.proxy.logSqlIndex] != golog.LogSqlOff &&
 				execTime > float64(c.proxy.slowLogTime[c.proxy.slowLogTimeIndex]) {
 				c.proxy.counter.IncrSlowLogTotal()
-				golog.OutputSql(state, "%.1fms - %s->%s:%s",
+				golog.OutputSql(state, "%.1fms - %s -> %s: %s",
 					execTime,
 					c.c.RemoteAddr(),
 					co.GetAddr(),

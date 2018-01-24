@@ -21,6 +21,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const (
+	// Many libraries only work with utf8 in Go.
+	// @since 2018-01-24 little-pan
+	GO_CHARSET = "utf8"
+)
+
 //整个config文件对应的结构
 type Config struct {
 	Addr     string `yaml:"addr"`
