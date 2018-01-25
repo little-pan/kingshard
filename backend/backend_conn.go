@@ -300,7 +300,7 @@ func (c *Conn) writeCommandStr(command byte, arg string) error {
 	c.pkg.Sequence = 0
 	// charset transfer, eg. utf8 to gbk etc
 	// @since 2018-01-24 little-pan
-	args  := mysql.EncodeString(arg, c.charset)
+	args  := mysql.Encode(arg, c.charset)
 	length := len(args) + 1
 
 	data := make([]byte, length+4)

@@ -206,7 +206,16 @@ func (c *ClientConn) readHandshakeResponse() error {
 	pos += 4
 
 	//charset, skip, if you want to use another charset, use set names
-	//c.collation = CollationId(data[pos])
+	// ---------------------------------------------------------------------
+	// Default client charset as mysql client
+	// @since 2018-01-25 little-pan
+	collation := mysql.CollationId(data[pos])
+	charset, err := mysql.Charset(collation)
+	if err != nil {
+		return mysql.NewDefaultError(mysql.ER_UNKNOWN_COLLATION, err)
+	}
+	c.charset  = charset
+	c.collation= collation
 	pos++
 
 	//skip reserved 23[00]
@@ -315,8 +324,8 @@ func (c *ClientConn) dispatch(data []byte) error {
 	case mysql.COM_QUERY:
 		// charset transfer, eg. gbk to utf8 etc
 		// @since 2018-01-24 little-pan
-		data = mysql.Decode(data, c.charset)
-		return c.handleQuery(hack.String(data))
+		query := mysql.Decode(data, c.charset)
+		return c.handleQuery(query)
 	case mysql.COM_PING:
 		return c.writeOK(nil)
 	case mysql.COM_INIT_DB:

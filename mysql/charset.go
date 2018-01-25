@@ -18,6 +18,8 @@ import (
 	"github.com/axgle/mahonia"
 	"github.com/flike/kingshard/config"
 	"github.com/flike/kingshard/core/hack"
+	"fmt"
+	"strings"
 )
 
 type CollationId uint8
@@ -560,11 +562,25 @@ var (
 	DEFAULT_COLLATION_NAME string      = "utf8_general_ci"
 )
 
-// Decode bytes: charset -> utf8
+// Mapping collation to it's charset
+// @since 2018-01-25 little-pan
+func Charset(collation CollationId) (string, error) {
+	charset, ok := Collations[collation]
+	if !ok {
+		return  "", fmt.Errorf("%s", collation)
+	}
+	i := strings.Index(charset, "_")
+	if i != -1 {
+		charset = charset[:i]
+	}
+	return charset, nil
+}
+
+// Decode bytes: charset bytes -> utf8 string
 // @since 2018-01-24 little-pan
-func Decode(bytes []byte, charset string) [] byte {
+func Decode(bytes []byte, charset string) string {
 	if config.GO_CHARSET == charset {
-		return bytes
+		return hack.String(bytes)
 	}
 	d := mahonia.NewDecoder(charset)
 	runes := make([]rune, len(bytes))
@@ -585,21 +601,12 @@ func Decode(bytes []byte, charset string) [] byte {
 		runes[destPos] = c
 		destPos++
 	}
-	return []byte(string(runes[:destPos]))
+	return string(runes[:destPos])
 }
 
-// Encode bytes: utf8 -> charset
+// Encode: utf8 string -> charset bytes
 // @since 2018-01-24 little-pan
-func Encode(bytes []byte, charset string) []byte {
-	if config.GO_CHARSET == charset {
-		return bytes
-	}
-	return EncodeString(string(bytes), charset)
-}
-
-// Encode string: utf8 -> charset
-// @since 2018-01-24 little-pan
-func EncodeString(s string, charset string) []byte {
+func Encode(s string, charset string) []byte {
 	if config.GO_CHARSET == charset {
 		return hack.Slice(s)
 	}
