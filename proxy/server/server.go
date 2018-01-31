@@ -597,6 +597,7 @@ func (s *Server) Run() error {
 	s.running = true
 
 	// flush counter
+	s.counter.Start()
 	go s.flushCounter()
 
 	for s.running {

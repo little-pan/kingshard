@@ -41,18 +41,7 @@ func (c *ClientConn) handleSet(stmt *sqlparser.Set, sql string) (err error) {
 		} else {
 			state = "OK"
 		}
-		execTime := float64(time.Now().UnixNano()-startTime) / float64(time.Millisecond)
-		if c.proxy.logSql[c.proxy.logSqlIndex] != golog.LogSqlOff &&
-			execTime > float64(c.proxy.slowLogTime[c.proxy.slowLogTimeIndex]) {
-			c.proxy.counter.IncrSlowLogTotal()
-			golog.OutputSql(state, "%.1fms - %s->%s:%s",
-				execTime,
-				c.c.RemoteAddr(),
-				c.proxy.addr,
-				sql,
-			)
-		}
-
+		c.logSQL(sql, startTime, state, c.proxy.addr)
 	}()
 
 	k := string(stmt.Exprs[0].Name.Name)

@@ -196,18 +196,7 @@ func (c *ClientConn) executeInNode(conn *backend.BackendConn, sql string, args [
 	} else {
 		state = "OK"
 	}
-	execTime := float64(time.Now().UnixNano()-startTime) / float64(time.Millisecond)
-	if strings.ToLower(c.proxy.logSql[c.proxy.logSqlIndex]) != golog.LogSqlOff &&
-		execTime > float64(c.proxy.slowLogTime[c.proxy.slowLogTimeIndex]) {
-		c.proxy.counter.IncrSlowLogTotal()
-		golog.OutputSql(state, "%.1fms - %s -> %s: %s",
-			execTime,
-			c.c.RemoteAddr(),
-			conn.GetAddr(),
-			sql,
-		)
-	}
-
+	c.logSQL(sql, startTime, state, conn.GetAddr())
 	if err != nil {
 		return nil, err
 	}
@@ -251,17 +240,7 @@ func (c *ClientConn) executeInMultiNodes(conns map[string]*backend.BackendConn, 
 				state = "OK"
 				rs[i] = r
 			}
-			execTime := float64(time.Now().UnixNano()-startTime) / float64(time.Millisecond)
-			if c.proxy.logSql[c.proxy.logSqlIndex] != golog.LogSqlOff &&
-				execTime > float64(c.proxy.slowLogTime[c.proxy.slowLogTimeIndex]) {
-				c.proxy.counter.IncrSlowLogTotal()
-				golog.OutputSql(state, "%.1fms - %s -> %s: %s",
-					execTime,
-					c.c.RemoteAddr(),
-					co.GetAddr(),
-					v,
-				)
-			}
+			c.logSQL(v, startTime, state, co.GetAddr())
 			i++
 		}
 		wg.Done()
@@ -287,6 +266,34 @@ func (c *ClientConn) executeInMultiNodes(conns map[string]*backend.BackendConn, 
 	}
 
 	return r, err
+}
+
+func (c *ClientConn) logSQL(sql string, startTime int64, state, destAddr string){
+	execTime := float64(time.Now().UnixNano()-startTime) / float64(time.Millisecond)
+	server   := c.proxy
+	// 1. Log slow SQL if slowLogTime > 0 and slow
+	// 2. Log SQL if enable log SQL and not slow
+	// @since 2018-01-31 little-pan
+	slowLogTime := server.slowLogTime[server.slowLogTimeIndex]
+	slow := slowLogTime > 0 && execTime > float64(slowLogTime)
+	if slow {
+		server.counter.IncrSlowLogTotal()
+		golog.OutputSql(state, "[Thread-%d][Slow] %.1fms - %s -> %s: %s",
+			c.connectionId,
+			execTime,
+			c.c.RemoteAddr(),
+			destAddr,
+			sql,
+		)
+	} else if server.logSql[server.logSqlIndex] != golog.LogSqlOff {
+		golog.OutputSql(state, "[Thread-%d][SQL] %.1fms - %s -> %s: %s",
+			c.connectionId,
+			execTime,
+			c.c.RemoteAddr(),
+			destAddr,
+			sql,
+		)
+	}
 }
 
 func (c *ClientConn) closeConn(conn *backend.BackendConn, rollback bool) {

@@ -26,6 +26,7 @@ import (
 	"github.com/flike/kingshard/core/golog"
 	"github.com/flike/kingshard/core/hack"
 	"github.com/flike/kingshard/mysql"
+	"time"
 )
 
 const (
@@ -74,6 +75,10 @@ var DEFAULT_CAPABILITY uint32 = mysql.CLIENT_LONG_PASSWORD | mysql.CLIENT_LONG_F
 	mysql.CLIENT_TRANSACTIONS | mysql.CLIENT_SECURE_CONNECTION
 
 var baseConnId uint32 = 10000
+
+func (c *ClientConn) ThreadId() uint32 {
+	return c.connectionId
+}
 
 func (c *ClientConn) IsAllowConnect() bool {
 	clientHost, _, err := net.SplitHostPort(c.c.RemoteAddr().String())
@@ -312,10 +317,13 @@ func (c *ClientConn) Run() {
 }
 
 func (c *ClientConn) dispatch(data []byte) error {
-	c.proxy.counter.IncrClientQPS()
+	// statistics
+	counter := c.proxy.counter
+	counter.IncrClientQPS()
+	counter.IncrQuestions()
+	// do-dispatch
 	cmd := data[0]
 	data = data[1:]
-
 	switch cmd {
 	case mysql.COM_QUIT:
 		c.handleRollback()
@@ -344,12 +352,38 @@ func (c *ClientConn) dispatch(data []byte) error {
 		return c.handleStmtReset(data)
 	case mysql.COM_SET_OPTION:
 		return c.writeEOF(0)
+	// add feature-com-stat since 2018-01-31 little-pan
+	case mysql.COM_STATISTICS:
+		return c.handleStatistics()
 	default:
 		msg := fmt.Sprintf("command %d not supported now", cmd)
 		golog.Error(moduleConn, "dispatch", msg, c.connectionId)
 		return mysql.NewError(mysql.ER_UNKNOWN_ERROR, msg)
 	}
 
+	return nil
+}
+
+func (c *ClientConn) handleStatistics() error {
+	// Statistics information format -
+	//Uptime: SECONDS Threads: 1  Questions: 985  Slow queries: 0  Opens: 83  Flush tables: 1  Open tables: 76
+	//Queries per second avg: 0.084
+	s := c.proxy
+	// Uptime
+	utm := s.counter.CalcUptime()
+	seconds := utm / time.Second
+	// Counter
+	cnt := s.counter
+	threads   := cnt.ClientConns
+	questions := cnt.Questions
+	slows     := cnt.OldSlowLogTotal
+	qps       := cnt.OldClientQPS
+	// write
+	result := fmt.Sprintf("Uptime:  %d  Threads: %d  Questions: %d  Slow queries: %d  Opens: 0  Flush tables: 0  " +
+		"Open tables: 0  Queries per second avg: %d", seconds, threads, questions, slows, qps)
+	data := make([]byte, 4, 4 + len(result))
+	data = append(data, hack.Slice(result)...)
+	c.writePacket(data)
 	return nil
 }
 

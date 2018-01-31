@@ -16,6 +16,7 @@ package server
 
 import (
 	"sync/atomic"
+	"time"
 )
 
 type Counter struct {
@@ -27,6 +28,9 @@ type Counter struct {
 	ClientQPS    int64
 	ErrLogTotal  int64
 	SlowLogTotal int64
+
+	since        time.Time
+	Questions    int64
 }
 
 func (counter *Counter) IncrClientConns() {
@@ -56,4 +60,16 @@ func (counter *Counter) FlushCounter() {
 	atomic.StoreInt64(&counter.OldSlowLogTotal, counter.SlowLogTotal)
 
 	atomic.StoreInt64(&counter.ClientQPS, 0)
+}
+
+func (counter *Counter) Start(){
+	counter.since = time.Now()
+}
+
+func (counter *Counter) CalcUptime() time.Duration {
+	return time.Since(counter.since)
+}
+
+func (counter *Counter) IncrQuestions(){
+	atomic.AddInt64(&counter.Questions, 1)
 }
