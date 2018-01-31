@@ -129,7 +129,6 @@ func (c *ClientConn) Close() error {
 	}
 
 	c.c.Close()
-
 	c.closed = true
 
 	return nil
@@ -296,6 +295,11 @@ func (c *ClientConn) Run() {
 		data, err := c.readPacket()
 
 		if err != nil {
+			// log read-packet error
+			// @since 2018-01-31 little-pan
+			if err != mysql.ErrBadConn {
+				golog.Error(moduleConn, "Run", err.Error(), c.connectionId)
+			}
 			return
 		}
 
@@ -304,12 +308,8 @@ func (c *ClientConn) Run() {
 			golog.Error(moduleConn, "Run", err.Error(), c.connectionId)
 			c.writeError(err)
 			if err == mysql.ErrBadConn {
-				c.Close()
+				return
 			}
-		}
-
-		if c.closed {
-			return
 		}
 
 		c.pkg.Sequence = 0

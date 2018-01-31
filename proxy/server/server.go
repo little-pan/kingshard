@@ -299,7 +299,10 @@ func (s *Server) newClientConn(co net.Conn) *ClientConn {
 	// The default is true (no delay),
 	// meaning that data is sent as soon as possible after a Write.
 	//I set this option false.
-	tcpConn.SetNoDelay(false)
+	// ---------------------------------------------------------------------------------------------
+	// NoDelay should be true, otherwise a client maybe blocked when data remains in write buffer!
+	// @since 2018-01-31 little-pan
+	tcpConn.SetNoDelay(true)
 	c.c = tcpConn
 
 	c.schema = s.GetSchema()
@@ -329,9 +332,8 @@ func (s *Server) newClientConn(co net.Conn) *ClientConn {
 }
 
 func (s *Server) onConn(c net.Conn) {
+	var conn *ClientConn
 	s.counter.IncrClientConns()
-	conn := s.newClientConn(c) //新建一个conn
-
 	defer func() {
 		err := recover()
 		if err != nil {
@@ -344,20 +346,21 @@ func (s *Server) onConn(c net.Conn) {
 			)
 		}
 
-		conn.Close()
+		if conn != nil {
+			conn.Close()
+		}
 		s.counter.DecrClientConns()
 	}()
 
+	conn = s.newClientConn(c) //新建一个conn
 	if allowConnect := conn.IsAllowConnect(); allowConnect == false {
 		err := mysql.NewError(mysql.ER_ACCESS_DENIED_ERROR, "ip address access denied by kingshard")
 		conn.writeError(err)
-		conn.Close()
 		return
 	}
 	if err := conn.Handshake(); err != nil {
 		golog.Error(moduleServer, "onConn", err.Error(), conn.connectionId)
 		conn.writeError(err)
-		conn.Close()
 		return
 	}
 
