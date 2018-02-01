@@ -302,7 +302,7 @@ func (c *ClientConn) Run() {
 			}
 			return
 		}
-
+		
 		if err := c.dispatch(data); err != nil {
 			c.proxy.counter.IncrErrLogTotal()
 			golog.Error(moduleConn, "Run", err.Error(), c.connectionId)

@@ -25,6 +25,7 @@ import (
 	"github.com/flike/kingshard/mysql"
 	"github.com/flike/kingshard/proxy/router"
 	"github.com/flike/kingshard/sqlparser"
+	"unicode/utf8"
 )
 
 type ExecuteDB struct {
@@ -64,7 +65,106 @@ func (c *ClientConn) preHandleShard(sql string) (bool, error) {
 		}
 	}
 
-	tokens := strings.FieldsFunc(sql, hack.IsSqlSep)
+	// Tokenize SQL statement - begin
+	// 1. Solve issue: "select*from t_shared", "select *from t_shared" or "select* from t_shared" not shared route.
+	// 2. We shouldn't tokenize SQL in string value, "#" comment, "-- " comment and block comment context.
+	// @since 2018-02-01 little-pan
+	svIndex  := -1; scIndex := -1; dcIndex := -1; bcIndex := -1
+	sepIndex :=  0; curIndex:=  0; sqlLen  := len(sql)
+	tokens := make([]string, 0, 32)
+	for _, r := range sql {
+		// Only one pass
+		isSepRune := false
+		switch r {
+		case '\'':
+			// String value context
+			if scIndex == -1 && dcIndex == -1 && bcIndex == -1 {
+				if svIndex == -1 {
+					// String value start
+					svIndex = curIndex
+				}else {
+					// String value over
+					svIndex = -1
+				}
+			}
+			break
+		case '#':
+			// Sharp line comment context
+			if svIndex == -1 && dcIndex == -1 && bcIndex == -1 {
+				if scIndex == -1 {
+					// Sharp line comment start
+					scIndex = curIndex
+				}
+			}
+			break
+		case '-':
+			// Double dash line comment context
+			if svIndex == -1 && scIndex == -1 && bcIndex == -1 {
+				// test "-- "
+				if dcIndex==-1 && curIndex+2<sqlLen && '-'==sql[curIndex+1] && ' '==sql[curIndex+2]{
+					dcIndex = curIndex
+				}
+			}
+			break
+		case '/':
+			// Block comment context
+			if svIndex == -1 && scIndex == -1 && dcIndex == -1 {
+				if bcIndex == -1 {
+					// test "/*"
+					if curIndex < sqlLen && '*' == sql[curIndex + 1] {
+						// Block comment start
+						bcIndex = curIndex
+						isSepRune = true
+						break
+					}
+					break
+				}
+				// test "*/" and not "/*/"
+				if '*'==sql[curIndex - 1] && bcIndex + 2 < curIndex {
+					// Block comment over
+					bcIndex = -1
+					isSepRune = true
+					break
+				}
+			}
+		case '\n':
+			// Line comment terminated
+			if svIndex != -1 || bcIndex != -1 {
+				break
+			}
+			if scIndex != -1 {
+				// Sharp line comment over
+				scIndex = -1
+			}
+			if dcIndex != -1 {
+				// Double dash line comment over
+				dcIndex = -1
+			}
+			isSepRune = true
+		default:
+			if svIndex != -1 || scIndex != -1 || dcIndex != -1 || bcIndex != -1 {
+				// We shouldn't tokenize the SQL in those context!
+				break
+			}
+			// Solve issue: "select*from tbl", "select *from tbl" or "select* from tbl" can't be shared!
+			if '*' == r {
+				isSepRune = true
+				break
+			}
+			isSepRune = hack.IsSqlSep(r)
+		}
+		if isSepRune {
+			if sepIndex < curIndex {
+				tokens = append(tokens, sql[sepIndex : curIndex])
+			}
+			sepIndex = curIndex + 1/* Skip current rune separator */
+		}
+		curIndex  = curIndex  + utf8.RuneLen(r)
+	}
+	if sepIndex < sqlLen {
+		tokens = append(tokens, sql[sepIndex : sqlLen])
+	}
+	// Tokenize SQL statement - end
 
 	if len(tokens) == 0 {
 		return false, errors.ErrCmdUnsupport

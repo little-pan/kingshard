@@ -34,22 +34,21 @@ import (
 func (c *ClientConn) handleQuery(sql string) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			golog.OutputSql("Error", "err:%v,sql:%s", e, sql)
-
-			if err, ok := e.(error); ok {
+			golog.OutputSql("Error", "error: %v, sql: %s", e, sql)
+			if er, ok := e.(error); ok {
 				const size = 4096
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
-
-				golog.Error("ClientConn", "handleQuery",
-					err.Error(), 0,
-					"stack", string(buf), "sql", sql)
+				golog.Error("ClientConn", "handleQuery", er.Error(), 0, "stack", string(buf), "sql", sql)
+				// Bugfix: should return the error, otherwise client blocked.
+				// @since 2018-02-01 little-pan
+				err = er
 			}
-			return
+			err = fmt.Errorf("%v", e)
 		}
 	}()
 
-	sql = strings.TrimRight(sql, ";") //删除sql语句最后的分号
+	sql = strings.TrimRight(sql, ";") // 删除sql语句最后的分号
 	hasHandled, err := c.preHandleShard(sql)
 	if err != nil {
 		golog.Error("server", "preHandleShard", err.Error(), 0,
